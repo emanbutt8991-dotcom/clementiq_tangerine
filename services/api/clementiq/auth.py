@@ -94,7 +94,8 @@ JUDGE_ROLES: tuple[Role, ...] = ("judge", "admin")
 
 # Server-side entitlements for role-restricted dashboard features. The role comes only from the
 # signed JWT (never from usernames, URL parameters or browser storage).
-RESTRICTED_FEATURES: dict[str, tuple[Role, ...]] = {"judgeDemo": JUDGE_ROLES, "dataImport": JUDGE_ROLES}
+RESTRICTED_FEATURES: dict[str, tuple[Role, ...]] = {"judgeDemo": JUDGE_ROLES, "dataImport": JUDGE_ROLES,
+                                                     "stressTest": JUDGE_ROLES, "needsAttention": JUDGE_ROLES}
 
 
 def entitled(p: Principal, feature_id: str) -> bool:

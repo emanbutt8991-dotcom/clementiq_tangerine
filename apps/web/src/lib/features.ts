@@ -10,7 +10,7 @@ export type FeatureId =
   | "shockSimulator" | "recoveryPlans" | "alerts"
   | "investments" | "solanaPortfolio"
   | "worldPulse" | "globalEventMap" | "aiAdvisor" | "insights"
-  | "dataImport" | "judgeDemo";
+  | "dataImport" | "judgeDemo" | "stressTest" | "needsAttention";
 
 export type CategoryId = "everyday" | "planning" | "investing" | "intelligence" | "data";
 export type Palette = "mint" | "peach" | "lavender" | "sky" | "rose" | "butter" | "teal" | "violet" | "coral" | "sage";
@@ -45,7 +45,7 @@ export const FEATURES: Feature[] = [
   { id: "shockSimulator", name: "Shock Simulator", description: "Test your resilience against life’s financial surprises.", route: "/simulator", category: "planning", palette: "peach", defaultVisible: true, order: 2, needsAccount: true },
   { id: "recoveryPlans", name: "Recovery Plans", description: "Get back on track with personalized action plans.", route: "/recovery", category: "planning", palette: "lavender", defaultVisible: true, order: 3, needsAccount: true },
   { id: "aiAdvisor", name: "AI Financial Advisor", description: "Personalized, data-driven guidance for smarter decisions.", route: "/advisor", category: "intelligence", palette: "teal", defaultVisible: true, order: 4, needsAccount: false },
-  { id: "worldPulse", name: "WorldPulse", description: "See how global events could impact your finances.", route: "/worldpulse", category: "intelligence", palette: "sky", defaultVisible: false, order: 5, needsAccount: false,
+  { id: "worldPulse", name: "WorldPulse", description: "See how global events could impact your finances.", route: "/worldpulse", category: "intelligence", palette: "sky", defaultVisible: false, order: 13, needsAccount: false,
     background: "Economic data keeps refreshing in the background while hidden." },
   { id: "financialTimeline", name: "Financial Timeline", description: "Your history and a 3D digital twin of your future.", route: "/timeline", category: "everyday", palette: "rose", defaultVisible: false, order: 6, needsAccount: true },
   { id: "investments", name: "Investments & Stocks", description: "Track holdings and stress-test your portfolio.", route: "/investments", category: "investing", palette: "butter", defaultVisible: false, order: 7, needsAccount: false },
@@ -55,8 +55,10 @@ export const FEATURES: Feature[] = [
     background: "Hiding this card does not stop alerts. Use Notification settings to change what you receive." },
   { id: "globalEventMap", name: "Global Event Map", description: "Explore where economic developments are happening.", route: "/map", category: "intelligence", palette: "sky", defaultVisible: false, order: 11, needsAccount: false },
   { id: "solanaPortfolio", name: "Solana Portfolio", description: "Read-only wallet insights and on-chain goal commitments.", route: "/solana", category: "investing", palette: "violet", defaultVisible: false, order: 12, needsAccount: false },
-  { id: "insights", name: "Insights & Discovery", description: "What the data reveals across all customers.", route: "/insights", category: "intelligence", palette: "butter", defaultVisible: false, order: 13, needsAccount: false },
+  { id: "insights", name: "Insights & Discovery", description: "What the data reveals across all customers.", route: "/insights", category: "intelligence", palette: "butter", defaultVisible: true, order: 5, needsAccount: false },
   { id: "judgeDemo", name: "Judge Demo", description: "The full twist-card walkthrough on one screen.", route: "/judge", category: "data", palette: "peach", defaultVisible: false, defaultFor: ["judge"], order: 14, roles: ["judge", "admin"], needsAccount: true },
+  { id: "stressTest", name: "Stress Test", description: "Pick an account and a twist card, then read the new runway and both plans.", route: "/stress-test", category: "planning", palette: "coral", defaultVisible: false, defaultFor: ["judge", "admin"], order: 16, roles: ["judge", "admin"], needsAccount: false },
+  { id: "needsAttention", name: "Needs Attention", description: "Customers flagged today: short this month, loan behind or thin buffer.", route: "/accounts", category: "planning", palette: "rose", defaultVisible: false, defaultFor: ["judge", "admin"], order: 17, roles: ["judge", "admin"], needsAccount: false },
   { id: "dataImport", name: "Data Import", description: "Ingestion status of the nine challenge datasets.", route: "/admin", category: "data", palette: "mint", defaultVisible: false, order: 15, roles: ["admin", "judge"], needsAccount: false },
 ];
 

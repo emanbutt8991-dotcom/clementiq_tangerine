@@ -10,6 +10,10 @@ from .base import NewsItem, client
 ECON_QUERY = ('("Bank of Canada" OR inflation OR "interest rate" OR tariff OR tariffs OR "oil price" OR '
               '"oil prices" OR unemployment OR "supply chain" OR "consumer prices" OR "housing market" OR '
               '"exchange rate" OR cryptocurrency OR "stock market")')
+# GDELT rejects ECON_QUERY ("Your query was too short or too long"), so it gets a shorter list of the
+# same core topics. Checked against the live API on 2026-11-08: this one returns results.
+GDELT_QUERY = ('("Bank of Canada" OR inflation OR "interest rate" OR tariffs OR "oil prices" OR unemployment OR '
+               '"housing market" OR "supply chain" OR "stock market")')
 
 
 class GdeltAdapter:
@@ -19,9 +23,10 @@ class GdeltAdapter:
     URL = "https://api.gdeltproject.org/api/v2/doc/doc"
 
     def fetch(self) -> list[NewsItem]:
-        params = {"query": f"{ECON_QUERY} sourcelang:english", "mode": "artlist", "format": "json",
+        params = {"query": f"{GDELT_QUERY} sourcelang:english", "mode": "artlist", "format": "json",
                   "maxrecords": 75, "timespan": "3d", "sort": "datedesc"}
-        with client() as c:
+        # GDELT often takes 20-30 s to answer (measured 2026-11-08), well past the 12 s default.
+        with client(timeout=max(45.0, get_settings().http_timeout_s)) as c:
             r = c.get(self.URL, params=params)
             if r.status_code == 429:  # GDELT allows ~1 request / 5 s per client; back off once
                 time.sleep(6)

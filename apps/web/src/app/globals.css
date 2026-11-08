@@ -170,3 +170,24 @@ body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
 
 /* Simple mode and calm mode helpers. */
 :root[data-simple="true"] .simple-hide { display: none !important; }
+
+/* ───────────── Stress Test & Needs Attention (ported from Tony's branch) ─────────────
+   Extra tokens and helpers used by components/stress/*. Additive only: nothing above changes. */
+:root { --good-bg: #ecfdf3; --warn-bg: #fff7e6; --bad-bg: #fef2f2; --field: #f6ede5; --track: #f1e4d9; --chevron: #c4b5a8; --press: #ffe9d9; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --good-bg: #13291c; --warn-bg: #2d2210; --bad-bg: #2e1517; --field: #2a211a; --track: #34291f; --chevron: #6f6358; --press: #33251a; }
+}
+:root[data-theme="dark"] { --good-bg: #13291c; --warn-bg: #2d2210; --bad-bg: #2e1517; --field: #2a211a; --track: #34291f; --chevron: #6f6358; --press: #33251a; }
+@theme inline {
+  --color-good-bg: var(--good-bg);
+  --color-warn-bg: var(--warn-bg);
+  --color-bad-bg: var(--bad-bg);
+  --color-field: var(--field);
+  --color-track: var(--track);
+  --color-chevron: var(--chevron);
+  --color-press: var(--press);
+  --font-display: var(--font-sans);
+}
+.large-title { font-size: 2rem; line-height: 1.15; font-weight: 800; letter-spacing: -0.02em; color: var(--ink); }
+.display-num { font-variant-numeric: tabular-nums; font-size: 2.75rem; line-height: 1.05; font-weight: 800; letter-spacing: -0.03em; }
+.marker { background: linear-gradient(transparent 55%, color-mix(in oklab, var(--tangerine) 28%, transparent) 55%); padding: 0 0.1em; }

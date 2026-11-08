@@ -127,6 +127,52 @@ def transactions(account_id: int, limit: int = Query(50, ge=1, le=500), offset: 
         "partner_bank": t.partner_bank} for t in rows]}
 
 
+_ORDER_LABELS = {"household bills": "Household bills", "insurance": "Insurance", "leasing": "Leasing",
+                 "loan payment": "Loan payment"}
+
+
+@router.get("/{account_id}/obligations")
+def obligations(account_id: int, p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
+    """Fixed payments the account has committed to (standing orders + a running loan) against the latest balance.
+
+    Answers "can this month's fixed payments come out of what is in the account?". The standing-order table is an
+    undated end-of-data snapshot, so due DATES are unknown: this is a month-level check, not a calendar.
+    """
+    authorize_account(p, account_id)
+    b = get_baseline(db, account_id)
+    df = monthly_frame(db, account_id)
+    last = df.iloc[-1] if len(df) else None
+    orders = db.execute(select(models.StandingOrder).where(models.StandingOrder.account_id == account_id)).scalars().all()
+    items: dict[str, float] = {}
+    for o in orders:
+        label = _ORDER_LABELS.get((o.purpose or "").strip().lower(), "Other transfer")
+        items[label] = items.get(label, 0.0) + float(o.amount)
+    loan = b.loan
+    loan_running = bool(loan and loan.get("running"))
+    if loan_running and "Loan payment" not in items:
+        items["Loan payment"] = float(loan["monthly_payment"])
+    lines = [{"label": k, "amount": round(v, 2)} for k, v in sorted(items.items(), key=lambda kv: -kv[1])]
+    total = round(sum(items.values()), 2)
+    balance = float(last.month_end_balance) if last is not None else None
+    left = None if balance is None else round(balance - total, 2)
+    status = ("unknown" if balance is None else "short" if left < 0
+              else "tight" if b.S > 0 and left < 0.5 * b.S else "covered")
+    loan_out = None
+    if loan:
+        meaning = {"A": "Finished, repaid", "B": "Finished, not repaid", "C": "Running, payments on track",
+                   "D": "Running, behind on payments"}.get(loan["status"], loan["status"])
+        loan_out = {"status": loan["status"], "meaning": meaning, "running": loan_running,
+                    "behind": loan["status"] == "D", "monthly_payment": loan["monthly_payment"]}
+    return {
+        "account_id": account_id, "as_of_month": b.last_month,
+        "balance": balance, "fixed_payments": lines, "fixed_total": total, "left_after_fixed": left, "status": status,
+        "typical_spending": b.S, "loan": loan_out,
+        "notes": ["Standing orders are an undated snapshot, so this is a monthly check, not a list of due dates.",
+                  "The data has one loan per account and one insurance category: it cannot separate a car loan "
+                  "from a mortgage, or health insurance from other policies."],
+    }
+
+
 @router.get("/{account_id}/loans")
 def loans(account_id: int, p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
     authorize_account(p, account_id)

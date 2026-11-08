@@ -11,8 +11,10 @@ describe("feature registry", () => {
     expect(new Set(FEATURES.map((f) => f.route)).size).toBe(FEATURES.length);
   });
 
-  it("new users see only the four default tools", () => {
-    expect(ids(homeFeatures(DEFAULT_DASHBOARD, "customer"))).toEqual(["financialDashboard", "shockSimulator", "recoveryPlans", "aiAdvisor"]);
+  // The rubric's three tasks (know the customer, take a shock, make a plan), Communication (advisor)
+  // and Discovery, the biggest judging weight (insights).
+  it("new users see the five rubric tools by default", () => {
+    expect(ids(homeFeatures(DEFAULT_DASHBOARD, "customer"))).toEqual(["financialDashboard", "shockSimulator", "recoveryPlans", "aiAdvisor", "insights"]);
   });
 
   it("judges also get the Judge Demo by default; Data Import is never shown to customers", () => {
@@ -33,7 +35,7 @@ describe("feature registry", () => {
 
   it("hiding removes a card and the rest close the gap; re-enabling restores it", () => {
     const hidden = prefs({ features: { shockSimulator: false } });
-    expect(ids(homeFeatures(hidden, "customer"))).toEqual(["financialDashboard", "recoveryPlans", "aiAdvisor"]);
+    expect(ids(homeFeatures(hidden, "customer"))).toEqual(["financialDashboard", "recoveryPlans", "aiAdvisor", "insights"]);
     const back = prefs({ features: { shockSimulator: true } });
     expect(ids(homeFeatures(back, "customer"))).toContain("shockSimulator");
   });
@@ -48,7 +50,7 @@ describe("feature registry", () => {
 
   it("favorites come first, then the custom order", () => {
     const p = prefs({ order: ["aiAdvisor", "recoveryPlans", "shockSimulator", "financialDashboard"], favorites: ["shockSimulator"] });
-    expect(ids(homeFeatures(p, "customer"))).toEqual(["shockSimulator", "aiAdvisor", "recoveryPlans", "financialDashboard"]);
+    expect(ids(homeFeatures(p, "customer"))).toEqual(["shockSimulator", "aiAdvisor", "recoveryPlans", "financialDashboard", "insights"]);
     expect(toggledFavorites(["a"], "a")).toEqual([]);
     expect(toggledFavorites([], "a")).toEqual(["a"]);
   });

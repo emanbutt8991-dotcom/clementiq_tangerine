@@ -66,6 +66,6 @@ class NewsAdapter(Protocol):
     def fetch(self) -> list[NewsItem]: ...
 
 
-def client() -> httpx.Client:
-    return httpx.Client(timeout=get_settings().http_timeout_s, headers={"User-Agent": USER_AGENT},
+def client(timeout: float | None = None) -> httpx.Client:
+    return httpx.Client(timeout=timeout or get_settings().http_timeout_s, headers={"User-Agent": USER_AGENT},
                         follow_redirects=True)

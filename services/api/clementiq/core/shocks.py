@@ -288,6 +288,8 @@ PRESETS: list[dict[str, Any]] = [
      "components": [{"type": "job_loss", "income_replacement_pct": 55, "duration_months": 6},
                     {"type": "bill_inflation", "pct": 15},
                     {"type": "emergency_expense", "amount": 3000}]},
+    {"id": "mortgage_renewal", "name": "Mortgage renewal — loan payment +6%", "judging": True,
+     "components": [{"type": "loan_payment_increase", "pct": 6}]},
     {"id": "cost_of_living", "name": "Cost of living squeeze (extended: groceries +8%, transport +12%)",
      "judging": False,
      "components": [{"type": "grocery_cost", "pct": 8}, {"type": "transport_cost", "pct": 12}]},
