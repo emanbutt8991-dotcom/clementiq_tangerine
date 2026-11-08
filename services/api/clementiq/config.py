@@ -54,7 +54,8 @@ class Settings(BaseSettings):
     # --- Snowflake Cortex (optional) ---
     snowflake_account_url: str | None = Field(None, alias="SNOWFLAKE_ACCOUNT_URL")
     snowflake_pat: str | None = Field(None, alias="SNOWFLAKE_PAT")
-    snowflake_model: str = Field("mistral-large2", alias="SNOWFLAKE_MODEL")
+    snowflake_model: str = Field("mistral-large3", alias="SNOWFLAKE_MODEL")
+    snowflake_warehouse: str | None = Field(None, alias="SNOWFLAKE_WAREHOUSE")
 
     # --- WorldPulse providers ---
     worldpulse_live: bool = Field(True, alias="WORLDPULSE_LIVE")
