@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     judge_access_code: str = Field("tangerine-judge", alias="JUDGE_ACCESS_CODE")
     admin_access_code: str = Field("tangerine-admin", alias="ADMIN_ACCESS_CODE")
     demo_customer_access_code: str = Field("tangerine-customer", alias="DEMO_CUSTOMER_ACCESS_CODE")
+    # Fernet key for API keys saved from Settings. Unset: derived from JWT_SECRET (changing
+    # JWT_SECRET then makes saved keys unreadable; re-enter them). Generate one with:
+    # python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    secrets_encryption_key: str | None = Field(None, alias="SECRETS_ENCRYPTION_KEY")
     rate_limit_per_minute: int = Field(240, alias="RATE_LIMIT_PER_MINUTE")
     ai_rate_limit_per_minute: int = Field(20, alias="AI_RATE_LIMIT_PER_MINUTE")
 
@@ -54,7 +58,12 @@ class Settings(BaseSettings):
     # --- Snowflake Cortex (optional) ---
     snowflake_account_url: str | None = Field(None, alias="SNOWFLAKE_ACCOUNT_URL")
     snowflake_pat: str | None = Field(None, alias="SNOWFLAKE_PAT")
-    snowflake_model: str = Field("mistral-large2", alias="SNOWFLAKE_MODEL")
+    snowflake_model: str = Field("mistral-large3", alias="SNOWFLAKE_MODEL")
+    snowflake_warehouse: str | None = Field(None, alias="SNOWFLAKE_WAREHOUSE")
+    # WorldPulse analysis step (Cortex REST chat completions). Uses the same account URL + PAT.
+    snowflake_cortex_enabled: bool = Field(False, alias="SNOWFLAKE_CORTEX_ENABLED")
+    cortex_model: str = Field("claude-sonnet-4-6", alias="CORTEX_MODEL")
+    cortex_timeout_s: float = Field(45.0, alias="CORTEX_TIMEOUT_S")
 
     # --- WorldPulse providers ---
     worldpulse_live: bool = Field(True, alias="WORLDPULSE_LIVE")

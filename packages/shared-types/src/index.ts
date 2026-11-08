@@ -124,6 +124,19 @@ export interface NewsEvent {
   latitude: number | null; longitude: number | null; location_basis: string | null; topic: string; topic_label: string;
   classification: string; summary: string | null; summary_engine: string | null; exposure_categories: string[];
   confidence_note: string | null; reliability: number; retrieved_at: string | null;
+  /** Snowflake Cortex analysis (null when Cortex was off or failed for this item). */
+  cortex_topic?: string | null; cortex_confidence?: "low" | "medium" | "high" | null;
+  cortex_injection_detected?: boolean | null; cortex_relevant?: boolean | null;
+  cortex_model?: string | null; cortex_request_id?: string | null; cortex_accepted?: boolean;
+  cortex_analysis?: CortexAnalysis | null;
+}
+
+export interface CortexAnalysis {
+  is_relevant: boolean; topic: string; secondary_topics: string[]; countries_affected: string[]; industries_affected: string[];
+  verified_facts: { statement: string; evidence_quote: string }[];
+  economic_indicators: { name: string; value_as_stated: string | null; evidence_quote: string | null }[];
+  direction: "increase" | "decrease" | "mixed" | "unclear"; uncertainties: string[]; injection_detected: boolean;
+  analysis_confidence: "low" | "medium" | "high"; model: string; request_id: string | null; facts_failed_grounding: number;
 }
 
 export interface Indicator {

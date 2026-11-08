@@ -54,7 +54,7 @@ Commands are written for Windows PowerShell; the macOS/Linux equivalents are in 
 **Test it**
 - http://localhost:8000/api/health shows `"clement_gemini": "enabled"` (it says `fallback-templates` when the key is missing).
 - Open **AI Financial Advisor** on Home, pick an account (e.g. 1001) and ask "Why is my runway short?". The answer should be labelled Gemini, not template.
-- On the **Financial Dashboard**, click an AI explanation card. It should say it came from Gemini.
+- On **Shock Simulator**, select an account and shock, then scroll to **Explain with Clement Gemini** and click **Explain**. **Recovery Plans** also has Goal Plan and Backup Plan explanation cards. If hidden, enable **Settings ? Privacy & AI ? Optional AI insights**.
 - **AI avatar:** go to **My Profile** → upload a photo → **AI-illustrated character**, tick consent and generate. It should stop saying "Not available on this server".
 - If something fails, the app quietly falls back to templates. Check the terminal running `npm run dev` for the Gemini error, which is usually a wrong key or a quota limit.
 
@@ -80,7 +80,7 @@ Commands are written for Windows PowerShell; the macOS/Linux equivalents are in 
 - **Crash simulator:** enter hypothetical crypto holdings and a price change. Runway updates instantly.
 - **Goal on-chain (the main demo):**
   1. In "Commit to a savings goal on Solana Devnet", type a goal name and click **Create goal**.
-  2. Click **Request 0.2 devnet SOL** for free test fees. If it fails, use https://faucet.solana.com.
+  2. Click **Request 0.2 devnet SOL** for free test fees. If the RPC faucet returns HTTP 410 (closed) or is rate-limited, use https://faucet.solana.com with Devnet selected and the connected wallet?s Solana public address. Free test SOL pays transaction fees; no purchase is needed.
   3. Click **Sign & record on Devnet** and approve in Phantom.
   4. The goal should show **On-chain verified**. Click **View on Solana Explorer** to see the transaction.
 - Only a salted hash goes on-chain; the goal details stay private.
@@ -92,34 +92,37 @@ Commands are written for Windows PowerShell; the macOS/Linux equivalents are in 
 **What it powers:** an **Ask Snowflake Cortex** button on the Insights page that gives an independent written review of the findings.
 
 **Steps**
-1. Sign up for the student trial (120 days) at https://signup.snowflake.com. Choose a cloud region that supports Cortex, for example AWS US West (Oregon) or AWS US East.
-2. Find your **account URL**: in Snowsight, click your name (bottom left) → **Account** → copy the account URL. It looks like `https://abc12345.us-east-1.snowflakecomputing.com` or `https://myorg-myaccount.snowflakecomputing.com`.
-3. Create a **programmatic access token (PAT)**: your name → **Settings → Authentication → Programmatic access tokens → Generate new token**. Copy it now; it is shown only once.
-   - If PAT creation complains about a network policy, run this in a worksheet as ACCOUNTADMIN (trial accounts only):
-     ```sql
-     CREATE NETWORK POLICY allow_all ALLOWED_IP_LIST = ('0.0.0.0/0');
-     ALTER USER <your_user> SET NETWORK_POLICY = allow_all;
-     ```
-4. Make sure your user can use Cortex (run in a worksheet as ACCOUNTADMIN):
+1. Use the event's student-trial signup link if supplied. A regular self-service trial can have AI features disabled; check the offer before adding payment details.
+2. Copy the account URL ending in `.snowflakecomputing.com`, not the `app.snowflake.com` dashboard URL.
+3. Open **Governance & security ? Users & roles ? your user ? Programmatic access tokens** and generate a token. Save it directly in the root `.env`; do not include template angle brackets or share it in chat.
+4. The token role needs `SNOWFLAKE.CORTEX_USER` and `USAGE` on the selected warehouse. Our demo token uses `PUBLIC`. An administrator can inspect and grant access in a SQL worksheet:
    ```sql
+   USE ROLE ACCOUNTADMIN;
+   SHOW GRANTS TO ROLE PUBLIC;
+   SHOW GRANTS ON WAREHOUSE COMPUTE_WH;
+   -- Only if the grants are missing:
    GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE PUBLIC;
+   GRANT USAGE ON WAREHOUSE COMPUTE_WH TO ROLE PUBLIC;
    ```
-5. In `.env`:
-   ```
+   These grants apply to all roles inheriting PUBLIC. For a deployment, use a dedicated application role with these privileges and restrict the token to it.
+5. Set the following in the root `.env` (no leading `#`):
+   ```env
    SNOWFLAKE_ACCOUNT_URL=https://your-account.snowflakecomputing.com
-   SNOWFLAKE_PAT=paste-your-token
-   SNOWFLAKE_MODEL=mistral-large2
+   SNOWFLAKE_PAT=your-token
+   SNOWFLAKE_MODEL=mistral-large3
+   SNOWFLAKE_WAREHOUSE=COMPUTE_WH
    ```
-   If your region doesn't have `mistral-large2`, try `llama3.1-70b` or `claude-3-5-sonnet`.
-6. Restart the app.
+6. Configure a user-scoped network policy allowing the app server's public egress IP. For a short local test, Snowsight can grant a token temporary network-policy access; our test used one hour. This expires and is not a deployment solution. Do not use an allow-all `0.0.0.0/0` policy.
+7. Restart the app.
 
 **Test it**
-- http://localhost:8000/api/health shows `"snowflake": "enabled"`.
-- Open **Insights** → click **Ask Snowflake Cortex**. A short review should appear, labelled Snowflake Cortex with the model name.
-- An error message means:
-  - **HTTP 401:** the token is wrong or expired.
-  - **HTTP 400/404 mentioning the model:** your region doesn't have that model; change `SNOWFLAKE_MODEL`.
-  - **network error:** the account URL is wrong.
+- The adapter calls `AI_COMPLETE` through the SQL API using bound parameters and polls asynchronous results. New accounts may block legacy `SNOWFLAKE.CORTEX.COMPLETE`; `mistral-large2` was also blocked as legacy in our student account.
+- In a worksheet, `SELECT AI_COMPLETE('mistral-large3', 'Reply with: Connection successful.');` checks model access.
+- Open **Insights ? Ask Snowflake Cortex**. Verify a non-empty review labelled Snowflake Cortex and `mistral-large3`.
+- `/api/health` showing `enabled` only confirms configuration, not successful API access.
+- HTTP 401: check token/account pairing, copied brackets, expiry, revocation and network policy. Restart after editing `.env`.
+- HTTP 403 or unknown model: check the trial entitlement, token role and supported models.
+- SQL API warehouse errors: check `SNOWFLAKE_WAREHOUSE` and the token role's warehouse USAGE grant.
 
 ---
 

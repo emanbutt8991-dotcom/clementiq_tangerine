@@ -46,6 +46,8 @@ TOPIC_RULES: list[tuple[str, re.Pattern]] = [
     ("regulation", re.compile(r"regulat|osfi|securities commission|banking rules", re.I)),
     ("policy", re.compile(r"budget|fiscal|stimulus|government spending|tax (cut|hike|change)", re.I)),
 ]
+# The existing keyword topic list; Cortex must classify into these (or "other").
+KEYWORD_TOPICS: list[str] = [t for t, _ in TOPIC_RULES]
 FORECAST_RE = re.compile(r"\b(forecast|expected|expects|could|may|might|predict|outlook|poised|likely|warns)\b", re.I)
 OPINION_RE = re.compile(r"\b(opinion|column|op-ed|editorial|commentary|why you should|analysis:)\b", re.I)
 
@@ -72,6 +74,43 @@ HYPOTHETICAL_TEMPLATES = [
     {"id": "hyp_fx8", "topic": "fx", "magnitude": 8, "title": "What if the Canadian dollar fell 8%?"},
     {"id": "hyp_rent7", "topic": "housing", "magnitude": 7, "title": "What if rents rose 7%?"},
 ]
+
+
+def cortex_accepted(e: models.NewsEvent) -> bool:
+    """A Cortex analysis may steer topic/alerts only if confident and not prompt-injected."""
+    return (e.cortex_topic is not None and e.cortex_confidence not in (None, "low")
+            and not e.cortex_injection_detected)
+
+
+def effective_topic(e: models.NewsEvent) -> str:
+    """Topic used for alerts: Cortex's when accepted and mappable, else the keyword tag."""
+    if cortex_accepted(e) and e.cortex_topic in TOPIC_CHANNELS:
+        return e.cortex_topic
+    return e.topic
+
+
+def _apply_cortex(ev: models.NewsEvent, it: NewsItem, cortex, stats: dict[str, Any]) -> dict[str, Any] | None:
+    """Run Cortex on one new item. Any failure keeps the keyword tag and never blocks the refresh.
+    Only the news item's own title and text are sent (never customer data)."""
+    text = (it.summary or "").strip() or it.headline  # GDELT often has only a title
+    try:
+        a = cortex.analyze(it.headline, text, KEYWORD_TOPICS)
+    except Exception as exc:  # noqa: BLE001
+        msg = f"{exc.__class__.__name__}: {str(exc)[:300]}"
+        log.warning("Cortex analysis failed for event %s; keeping keyword topic %s (%s)", ev.id, ev.topic, msg)
+        stats["cortex_errors"] += 1
+        stats["cortex_last_error"] = msg
+        return None
+    data = a.model_dump(mode="json")
+    ev.cortex_topic, ev.cortex_confidence = a.topic, a.analysis_confidence
+    ev.cortex_injection_detected, ev.cortex_relevant = a.injection_detected, a.is_relevant
+    ev.cortex_model, ev.cortex_request_id = (a.model or "")[:64], (a.request_id or "")[:128] or None
+    ev.cortex_analysis = data
+    stats["cortex_analyzed"] += 1
+    if cortex_accepted(ev) and a.topic in TOPIC_CHANNELS:  # "other" has no spending mapping: keep keyword tag
+        ev.topic = a.topic
+        ev.exposure_categories = TOPIC_CHANNELS[a.topic]
+    return data
 
 
 def classify_topic(text: str) -> str | None:
@@ -222,10 +261,12 @@ def indicator_events(db: Session) -> int:
 
 
 # ---------------------------------------------------------------- news -----------------
-def store_news(db: Session, items: list[NewsItem], summarize_limit: int = 8) -> dict[str, int]:
+def store_news(db: Session, items: list[NewsItem], summarize_limit: int = 8, cortex=None) -> dict[str, Any]:
+    """`cortex`: an open CortexClient (or None). It analyzes the same new items Gemini summarises."""
     from ..ai.service import summarize_news
 
-    stats = {"fetched": len(items), "duplicates": 0, "irrelevant": 0, "stored": 0, "summarized": 0}
+    stats: dict[str, Any] = {"fetched": len(items), "duplicates": 0, "irrelevant": 0, "stored": 0, "summarized": 0,
+                             "cortex_analyzed": 0, "cortex_errors": 0}
     since = datetime.now(timezone.utc) - timedelta(days=7)
     recent_titles = {title_key(t) for t in db.execute(
         select(models.NewsEvent.headline).where(models.NewsEvent.retrieved_at >= since)).scalars()}
@@ -254,10 +295,12 @@ def store_news(db: Session, items: list[NewsItem], summarize_limit: int = 8) -> 
         recent_titles.add(tk)
         stats["stored"] += 1
         if stats["summarized"] < summarize_limit:
+            analysis = _apply_cortex(ev, it, cortex, stats) if cortex is not None else None
+            grounded = analysis if analysis is not None and not analysis["injection_detected"] else None
             res = summarize_news(db, {"id": ev.id, "headline": ev.headline, "summary": it.summary,
                                       "source_name": ev.source_name, "published_at": ev.published_at,
-                                      "source_type": ev.source_type, "topic": topic,
-                                      "exposure_categories": ev.exposure_categories})
+                                      "source_type": ev.source_type, "topic": ev.topic,
+                                      "exposure_categories": ev.exposure_categories}, cortex=grounded)
             c = res["content"]
             ev.summary = c["summary"]
             ev.summary_engine = res["engine"]
@@ -281,7 +324,8 @@ def refresh_all(db: Session, include_news: bool = True) -> dict[str, Any]:
     s = get_settings()
     report: dict[str, Any] = {}
     if not s.worldpulse_live:
-        for name in ("world_bank_geo", "bank_of_canada", "statistics_canada", "world_bank", "gdelt", "newsapi", "coingecko"):
+        for name in ("world_bank_geo", "bank_of_canada", "statistics_canada", "world_bank", "gdelt", "newsapi", "coingecko",
+                     "snowflake_cortex"):
             row = db.get(models.DataSourceStatus, name) or models.DataSourceStatus(source=name, kind="external", status="disabled")
             row.status = "disabled"
             db.merge(row)
@@ -305,11 +349,52 @@ def refresh_all(db: Session, include_news: bool = True) -> dict[str, Any]:
     run("world_bank", "indicator", lambda: store_series(db, WorldBankAdapter().fetch()))
     report["official_events_created"] = indicator_events(db)
     if include_news:
-        run("gdelt", "news", lambda: store_news(db, GdeltAdapter().fetch())["stored"])
-        if s.news_api_key:
-            run("newsapi", "news", lambda: store_news(db, NewsApiAdapter().fetch())["stored"])
+        cortex, cortex_stats = _open_cortex(db), {"cortex_analyzed": 0, "cortex_errors": 0}
+
+        def news(adapter) -> int:
+            st = store_news(db, adapter.fetch(), cortex=cortex)
+            for k in ("cortex_analyzed", "cortex_errors"):
+                cortex_stats[k] += st[k]
+            if "cortex_last_error" in st:
+                cortex_stats["cortex_last_error"] = st["cortex_last_error"]
+            return st["stored"]
+
+        try:
+            run("gdelt", "news", lambda: news(GdeltAdapter()))
+            if s.news_api_key:
+                run("newsapi", "news", lambda: news(NewsApiAdapter()))
+        finally:
+            if cortex is not None:
+                cortex.close()
+                _record_cortex(db, cortex_stats)
+                report["snowflake_cortex"] = cortex_stats
     run("coingecko", "market", lambda: store_quotes(db, CoinGeckoAdapter().fetch()))
     return report
+
+
+def _open_cortex(db: Session):
+    """One CortexClient per refresh, or None (status recorded as disabled/error)."""
+    from .cortex import CortexClient, cortex_enabled
+
+    if not cortex_enabled():
+        row = db.get(models.DataSourceStatus, "snowflake_cortex") or models.DataSourceStatus(
+            source="snowflake_cortex", kind="ai", status="disabled")
+        row.status, row.last_attempt_at = "disabled", datetime.now(timezone.utc)
+        db.merge(row)
+        db.commit()
+        return None
+    try:
+        return CortexClient()
+    except Exception as exc:  # noqa: BLE001
+        _status(db, "snowflake_cortex", "ai", False, error=f"{exc.__class__.__name__}: {exc}")
+        return None
+
+
+def _record_cortex(db: Session, st: dict[str, Any]) -> None:
+    if st["cortex_errors"] and not st["cortex_analyzed"]:
+        _status(db, "snowflake_cortex", "ai", False, error=st.get("cortex_last_error"))
+    else:
+        _status(db, "snowflake_cortex", "ai", True, st["cortex_analyzed"])
 
 
 def store_quotes(db: Session, quotes) -> int:
@@ -335,6 +420,10 @@ def event_dict(e: models.NewsEvent) -> dict[str, Any]:
         "exposure_categories": e.exposure_categories, "confidence_note": e.confidence_note,
         "reliability": source_reliability(e.source_type, e.source_name),
         "retrieved_at": e.retrieved_at.isoformat() if e.retrieved_at else None,
+        "cortex_topic": e.cortex_topic, "cortex_confidence": e.cortex_confidence,
+        "cortex_injection_detected": e.cortex_injection_detected, "cortex_relevant": e.cortex_relevant,
+        "cortex_model": e.cortex_model, "cortex_request_id": e.cortex_request_id,
+        "cortex_accepted": cortex_accepted(e), "cortex_analysis": e.cortex_analysis,
     }
 
 

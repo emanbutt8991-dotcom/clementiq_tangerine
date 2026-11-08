@@ -9,12 +9,12 @@ from .. import models
 from ..ai import gemini
 from ..ai.sanitize import financial_context
 from ..ai.service import explain_scenario
-from ..auth import Principal, authorize_account, current_principal
+from ..auth import Principal, authorize_account, current_principal, require_admin
 from ..core.exposure import INVESTMENT_CHANNELS, TOPIC_CHANNELS, TOPIC_LABELS, ImpactRequest, event_impact
 from ..db import get_db
 from ..jobs import JOBS, monitoring_status, run_job
 from ..repository import ai_allowed, audit, get_baseline
-from ..worldpulse.service import (HYPOTHETICAL_TEMPLATES, event_dict, latest_magnitude_for_topic, list_indicators,
+from ..worldpulse.service import (HYPOTHETICAL_TEMPLATES, KEYWORD_TOPICS, event_dict, latest_magnitude_for_topic, list_indicators,
                                   source_statuses)
 
 router = APIRouter(prefix="/api/worldpulse", tags=["worldpulse"])
@@ -140,3 +140,44 @@ def research(body: ResearchBody, p: Principal = Depends(current_principal), db: 
             "Separate confirmed facts from forecasts and opinions. Be politically neutral. Question: " + body.question)
     except gemini.GeminiUnavailable as exc:
         return {"text": None, "citations": [], "engine": "unavailable", "reason": str(exc)}
+
+
+# ---------------------------------------------------------------- Snowflake Cortex -----
+class CortexAnalyzeBody(BaseModel):
+    title: str = Field(min_length=3, max_length=500)
+    text: str = Field(min_length=1, max_length=20_000)
+
+
+@router.get("/cortex/health")
+def cortex_health(p: Principal = Depends(require_admin)):
+    """Live round-trip to Cortex (a 10-token completion). Never returns the token."""
+    from ..worldpulse.cortex import CortexClient, cortex_enabled
+    if not cortex_enabled():
+        return {"enabled": False}
+    client = None
+    try:
+        client = CortexClient()
+        return {"enabled": True, "ok": True, **client.health()}
+    except Exception as exc:  # noqa: BLE001
+        return {"enabled": True, "ok": False, "error": f"{exc.__class__.__name__}: {str(exc)[:300]}"}
+    finally:
+        if client is not None:
+            client.close()
+
+
+@router.post("/cortex/analyze")
+def cortex_analyze(body: CortexAnalyzeBody, p: Principal = Depends(require_admin), db: Session = Depends(get_db)):
+    """Admin demo: analyze one pasted news item (news text only, never customer data). Nothing is stored."""
+    from ..worldpulse.cortex import CortexClient, cortex_enabled
+    if not cortex_enabled():
+        raise HTTPException(409, "Snowflake Cortex is disabled (SNOWFLAKE_CORTEX_ENABLED, SNOWFLAKE_ACCOUNT_URL, SNOWFLAKE_PAT)")
+    audit(db, p.sub, "cortex_analyze", None, title=body.title[:120])
+    client = CortexClient()
+    try:
+        a = client.analyze(body.title, body.text, KEYWORD_TOPICS)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"Cortex analysis failed: {exc.__class__.__name__}: {str(exc)[:300]}") from exc
+    finally:
+        client.close()
+    return {"analysis": a.model_dump(mode="json"), "topics": KEYWORD_TOPICS,
+            "accepted": a.analysis_confidence != "low" and not a.injection_detected}

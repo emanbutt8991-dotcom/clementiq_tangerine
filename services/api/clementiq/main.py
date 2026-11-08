@@ -8,11 +8,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
+from . import secrets_store
 from .config import get_settings
 from .db import Base, get_engine
 from .ratelimit import RateLimitMiddleware
-from .routers import accounts, ai, alerts, insights, investments, profile, reports, scenarios, solana, system, worldpulse
+from .routers import accounts, ai, alerts, insights, integrations, investments, profile, reports, scenarios, solana, system, worldpulse
 
 
 class _RedactFilter(logging.Filter):
@@ -38,6 +40,7 @@ def create_app() -> FastAPI:
         # Dev convenience: ensure tables exist on SQLite. Production uses `alembic upgrade head`.
         if s.is_sqlite:
             Base.metadata.create_all(get_engine())
+        secrets_store.refresh(force=True)  # API keys saved from Settings override .env
         yield
 
     app = FastAPI(title="ClementIQ API", version="1.0.0", lifespan=lifespan,
@@ -50,6 +53,8 @@ def create_app() -> FastAPI:
     @app.middleware("http")
     async def request_id(request: Request, call_next):
         rid = request.headers.get("x-request-id", uuid.uuid4().hex[:12])
+        if secrets_store.is_stale():  # pick up keys saved through another worker process
+            await run_in_threadpool(secrets_store.refresh)
         resp = await call_next(request)
         resp.headers["x-request-id"] = rid
         resp.headers["x-content-type-options"] = "nosniff"
@@ -60,7 +65,7 @@ def create_app() -> FastAPI:
         logging.getLogger("clementiq").exception("unhandled error on %s", request.url.path)
         return JSONResponse({"detail": "internal error"}, status_code=500)
 
-    for r in (system, accounts, scenarios, worldpulse, investments, solana, ai, alerts, insights, profile, reports):
+    for r in (system, accounts, scenarios, worldpulse, investments, solana, ai, alerts, insights, integrations, profile, reports):
         app.include_router(r.router)
     return app
 

@@ -21,7 +21,7 @@ from ..core.analytics import detect_anomalies
 from ..core.exposure import CHANNELS, INVESTMENT_CHANNELS, TOPIC_CHANNELS, TOPIC_LABELS, ImpactRequest, event_impact
 from ..core.runway import compute_runway
 from ..repository import get_baseline, get_prefs, monthly_frame
-from ..worldpulse.service import latest_magnitude_for_topic, source_reliability
+from ..worldpulse.service import effective_topic, latest_magnitude_for_topic, source_reliability
 from .relevance import SEVERITY_RANK, score_event, severity_for
 
 log = logging.getLogger("clementiq.alerts")
@@ -87,6 +87,9 @@ def financial_health_candidates(db: Session, owner: str, account_id: int, prefs:
     return out
 
 
+LOW_CONFIDENCE_FACTOR = 0.6
+
+
 def event_candidates(db: Session, owner: str, account_id: int, prefs: dict[str, Any], max_events: int = 25) -> list[dict[str, Any]]:
     b = get_baseline(db, account_id)
     rw = compute_runway(b.B, b.I, b.S)
@@ -97,29 +100,36 @@ def event_candidates(db: Session, owner: str, account_id: int, prefs: dict[str, 
                         .order_by(models.NewsEvent.published_at.desc()).limit(max_events)).scalars().all()
     out = []
     for e in events:
-        inv_assets = {c["asset"] for c in INVESTMENT_CHANNELS.get(e.topic, [])}
+        # Snowflake Cortex: skip items it judged irrelevant or prompt-injected; use its topic when accepted.
+        if e.cortex_injection_detected or e.cortex_relevant is False:
+            continue
+        topic = effective_topic(e)
+        inv_assets = {c["asset"] for c in INVESTMENT_CHANNELS.get(topic, [])}
         inv_match = bool(held & inv_assets)
-        channels = TOPIC_CHANNELS.get(e.topic, [])
+        channels = TOPIC_CHANNELS.get(topic, [])
         magnitude, mag_basis = None, None
         if e.source_type == "official":
-            magnitude = latest_magnitude_for_topic(db, e.topic)
+            magnitude = latest_magnitude_for_topic(db, topic)
             mag_basis = "latest official data"
-        if magnitude is None and e.topic in DEFAULT_MAGNITUDE:
-            magnitude, mag_basis = DEFAULT_MAGNITUDE[e.topic], "illustrative (article does not quantify the change)"
+        if magnitude is None and topic in DEFAULT_MAGNITUDE:
+            magnitude, mag_basis = DEFAULT_MAGNITUDE[topic], "illustrative (article does not quantify the change)"
         impact = None
         if channels and magnitude:
-            impact = event_impact(b, ImpactRequest(account_id=account_id, topic=e.topic, magnitude=magnitude, level="medium",
+            impact = event_impact(b, ImpactRequest(account_id=account_id, topic=topic, magnitude=magnitude, level="medium",
                                                    event_id=e.id, event_title=e.headline))
         exposed = sum(CHANNELS[c].baseline(b) for c in channels if CHANNELS[c].kind == "spending")
         monthly = (impact["additional_monthly_spending"] - impact["additional_monthly_income"]) if impact else 0.0
         sc = score_event(spending=b.S, exposed_baseline=exposed, monthly_impact=monthly, published_at=e.published_at,
                          reliability=source_reliability(e.source_type, e.source_name), runway_months=rw.months,
-                         no_shortfall=rw.no_shortfall, topic=e.topic, interests=prefs.get("interests", []),
+                         no_shortfall=rw.no_shortfall, topic=topic, interests=prefs.get("interests", []),
                          investment_match=inv_match)
-        category = CATEGORY_OF_TOPIC.get(e.topic, "loan_exposure" if e.topic == "interest_rate" and b.P > 0 else "global_events")
+        if e.cortex_confidence == "low":  # weak analysis: keep the alert but rank it lower
+            sc = {**sc, "score": round(sc["score"] * LOW_CONFIDENCE_FACTOR, 1),
+                  "breakdown": {**sc["breakdown"], "cortex_low_confidence_factor": LOW_CONFIDENCE_FACTOR}}
+        category = CATEGORY_OF_TOPIC.get(topic, "loan_exposure" if topic == "interest_rate" and b.P > 0 else "global_events")
         if not channels and not inv_match:
             continue  # no personal channel and no holdings exposed: not relevant to this user
-        rel = (f"{TOPIC_LABELS.get(e.topic, e.topic)} could affect your "
+        rel = (f"{TOPIC_LABELS.get(topic, topic)} could affect your "
                + (", ".join(CHANNELS[c].label.lower() for c in channels) if channels else "investment holdings")
                + (f". Modeled (medium pass-through, {mag_basis}): about ${monthly:,.0f}/month." if impact else "."))
         out.append(_candidate(
@@ -131,7 +141,7 @@ def event_candidates(db: Session, owner: str, account_id: int, prefs: dict[str, 
             confidence="official data" if e.source_type == "official" else
                        ("reported" if e.classification == "reported" else e.classification),
             suggested_action="Simulate the impact to see low/medium/high scenarios.",
-            simulation_link=f"/worldpulse?account={account_id}&event={e.id}&topic={e.topic}" + (f"&magnitude={magnitude}" if magnitude else ""),
+            simulation_link=f"/worldpulse?account={account_id}&event={e.id}&topic={topic}" + (f"&magnitude={magnitude}" if magnitude else ""),
             news_event_id=e.id))
     return out
 

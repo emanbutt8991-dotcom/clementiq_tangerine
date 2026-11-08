@@ -269,7 +269,7 @@ class NewsEvent(Base):
     country_code: Mapped[str | None] = mapped_column(String(3))
     latitude: Mapped[float | None] = mapped_column(Float)
     longitude: Mapped[float | None] = mapped_column(Float)
-    location_basis: Mapped[str | None] = mapped_column(String(48))
+    location_basis: Mapped[str | None] = mapped_column(String(200))
     topic: Mapped[str] = mapped_column(String(48), index=True)
     classification: Mapped[str] = mapped_column(String(24), default="reported")
     summary: Mapped[str | None] = mapped_column(Text)
@@ -277,6 +277,14 @@ class NewsEvent(Base):
     exposure_categories: Mapped[list] = mapped_column(JSON, default=list)
     confidence_note: Mapped[str | None] = mapped_column(Text)
     retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # Snowflake Cortex analysis (WorldPulse). Null when Cortex was off or failed for this item.
+    cortex_topic: Mapped[str | None] = mapped_column(String(48))
+    cortex_confidence: Mapped[str | None] = mapped_column(String(8))
+    cortex_injection_detected: Mapped[bool | None] = mapped_column(Boolean)
+    cortex_relevant: Mapped[bool | None] = mapped_column(Boolean)
+    cortex_model: Mapped[str | None] = mapped_column(String(64))
+    cortex_request_id: Mapped[str | None] = mapped_column(String(128))
+    cortex_analysis: Mapped[dict | None] = mapped_column(JSON)
 
 
 class MarketPrice(Base):
@@ -447,3 +455,16 @@ class JobRun(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(16))
     detail: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class IntegrationSecret(Base):
+    """Integration settings (API keys, endpoints) entered in Settings by an admin.
+
+    `ciphertext` is Fernet-encrypted (AES-128-CBC + HMAC-SHA256); plaintext is never stored and never
+    returned by the API. A row overrides the matching environment variable; deleting it reverts.
+    """
+    __tablename__ = "integration_secrets"
+    name: Mapped[str] = mapped_column(String(64), primary_key=True)
+    ciphertext: Mapped[str] = mapped_column(Text)
+    updated_by: Mapped[str] = mapped_column(String(64))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Accessibility, Bell, CheckCircle2, CircleSlash, LayoutGrid, Palette, Plug, ShieldCheck } from "lucide-react";
+import { Accessibility, Bell, CheckCircle2, CircleSlash, KeyRound, LayoutGrid, Palette, Plug, ShieldCheck } from "lucide-react";
 import { useSettings, useSources, useVerifiedRole } from "@/lib/hooks";
 import { useSession } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/misc";
 import { CustomizeDashboard } from "@/components/settings/CustomizeDashboard";
 import { AccessibilitySettings, AppearanceSettings, NotificationSettings, PrivacySettings } from "@/components/settings/PersonalSettings";
+import { IntegrationKeys } from "@/components/settings/IntegrationKeys";
 import { DataSourceStatus } from "@/components/world/WorldPulse";
 
 const INTEGRATION_LABEL: Record<string, string> = {
@@ -22,7 +23,7 @@ const SECTIONS = [
   { id: "appearance", label: "Appearance", icon: Palette, blurb: "Theme, orchard scenery and your character's visibility." },
   { id: "notifications", label: "Notifications", icon: Bell, blurb: "Which alerts you receive and how." },
   { id: "privacy", label: "Privacy & AI", icon: ShieldCheck, blurb: "AI personalization, privacy mode and image consent." },
-  { id: "account", label: "Account & Integrations", icon: Plug, blurb: "Server integrations and data-source health." },
+  { id: "account", label: "Account & Integrations", icon: Plug, blurb: "API keys, server integrations and data-source health." },
 ] as const;
 /** Older links keep working. */
 const ALIASES: Record<string, string> = { integrations: "account" };
@@ -31,14 +32,22 @@ type SectionId = (typeof SECTIONS)[number]["id"];
 function Integrations() {
   const s = useSettings();
   const sources = useSources();
+  const role = useVerifiedRole();
   return (
+    <div className="space-y-5">
+    {role === "admin" ? <IntegrationKeys /> : (
+      <p className="rounded-xl border border-line bg-surface px-4 py-3 text-sm text-ink-2">
+        <KeyRound className="mr-1.5 inline size-4" />API keys can be entered here by an <b>admin</b>. Sign in with the admin access code to manage them.
+      </p>
+    )}
     <div className="grid gap-5 lg:grid-cols-2">
-      <Card><CardHeader><div><CardTitle>Integrations</CardTitle><CardDescription>Configured on the server via environment variables. Keys never reach the browser.</CardDescription></div></CardHeader>
+      <Card><CardHeader><div><CardTitle>Integrations</CardTitle><CardDescription>Set in <code>.env</code> or entered above by an admin. Keys never reach the browser.</CardDescription></div></CardHeader>
         <CardContent><ul className="space-y-1.5 text-sm">{s.data && Object.entries(s.data.integrations).filter(([k]) => k in INTEGRATION_LABEL).map(([k, v]) => (
           <li key={k} className="flex items-center justify-between">{INTEGRATION_LABEL[k]}{v ? <span className="flex items-center gap-1 text-xs text-good"><CheckCircle2 className="size-3.5" /> enabled</span> : <span className="flex items-center gap-1 text-xs text-ink-3"><CircleSlash className="size-3.5" /> not configured</span>}</li>
         ))}
         {s.data && <li className="flex items-center justify-between">Database<span className="text-xs text-ink-2">{String(s.data.integrations.database)}{s.data.integrations.gemini_model ? ` · Gemini ${s.data.integrations.gemini_model}` : ""}</span></li>}</ul></CardContent></Card>
       <Card><CardHeader><div><CardTitle>Data source status</CardTitle></div></CardHeader><CardContent>{sources.data ? <DataSourceStatus sources={sources.data.sources} monitoring={sources.data.monitoring} /> : <Skeleton className="h-24" />}</CardContent></Card>
+    </div>
     </div>
   );
 }

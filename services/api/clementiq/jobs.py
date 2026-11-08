@@ -21,6 +21,8 @@ JOB_INTERVALS_MIN = {"worldpulse_refresh": 60, "market_refresh": 15, "alerts_gen
 
 
 def run_job(name: str, fn: Callable[[Session], Any], runner: str = "worker") -> dict[str, Any]:
+    from .secrets_store import refresh
+    refresh()  # the worker process picks up API keys saved from Settings
     SessionLocal = session_factory()
     with SessionLocal() as db:
         run = models.JobRun(job=name, runner=runner, status="running")

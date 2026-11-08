@@ -17,6 +17,7 @@ import { ShockParameterSlider } from "@/components/finance/Shock";
 import { FinancialRunwayGauge } from "@/components/finance/Gauges";
 import { AIInsightCard } from "@/components/ai/AIInsightCard";
 import type { Monitoring } from "@/lib/hooks";
+import { CortexEventBadge } from "@/components/world/Cortex";
 
 const CLASS_TONE: Record<string, "good" | "blue" | "warn" | "violet" | "neutral"> = {
   confirmed: "good", reported: "blue", forecast: "warn", opinion: "violet", speculation: "warn", unclear: "neutral",
@@ -38,6 +39,7 @@ export function WorldPulseNewsCard({ e, onSimulate, selected }: { e: NewsEvent; 
       {e.summary && <p className="mt-2 text-sm text-ink">{e.summary} {e.summary_engine && <span className="text-[0.625rem] text-ink-3">({e.summary_engine})</span>}</p>}
       {e.exposure_categories.length > 0 && <p className="mt-2 text-xs text-ink-2">Possible exposure: {e.exposure_categories.map((c) => c.replace(/_/g, " ")).join(", ")}</p>}
       {e.confidence_note && <p className="mt-1 text-[0.6875rem] italic text-ink-3">{e.confidence_note}</p>}
+      <CortexEventBadge e={e} />
       <div className="mt-3 flex items-center justify-between">
         <span className="text-[0.625rem] text-ink-3">Source reliability {Math.round(e.reliability * 100)}%</span>
         {onSimulate && <Button size="sm" variant="secondary" onClick={() => onSimulate(e)}>Simulate impact</Button>}

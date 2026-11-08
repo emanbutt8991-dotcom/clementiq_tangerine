@@ -1,0 +1,57 @@
+{
+  "measured_at": "2026-11-08T06:02:36.682978+00:00",
+  "repeats": 5,
+  "queries": {
+    "book_monthly_cashflow": {
+      "description": "Monthly money in/out for every account (all 1.06M transactions)",
+      "raw": {
+        "min_ms": 3228.91,
+        "median_ms": 3339.62,
+        "rows": 185057,
+        "runs": 5
+      },
+      "continuous_aggregate": {
+        "min_ms": 1793.57,
+        "median_ms": 1811.47,
+        "rows": 185057,
+        "runs": 5
+      },
+      "speedup_median": 1.84
+    },
+    "one_account_daily_2y": {
+      "description": "Daily cash flow for one account over two years",
+      "raw": {
+        "min_ms": 25.7,
+        "median_ms": 27.48,
+        "rows": 180,
+        "runs": 5
+      },
+      "continuous_aggregate": {
+        "min_ms": 25.81,
+        "median_ms": 25.94,
+        "rows": 180,
+        "runs": 5
+      },
+      "speedup_median": 1.06
+    },
+    "book_total_2025": {
+      "description": "Total 2025 flow across the book",
+      "raw": {
+        "min_ms": 43.21,
+        "median_ms": 97.78,
+        "rows": 1,
+        "runs": 5
+      },
+      "continuous_aggregate": {
+        "min_ms": 112.57,
+        "median_ms": 188.13,
+        "rows": 1,
+        "runs": 5
+      },
+      "speedup_median": 0.52
+    }
+  },
+  "timescaledb_version": "2.31.0",
+  "transactions_rows": 1056320,
+  "transactions_chunks": 26
+}

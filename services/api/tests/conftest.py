@@ -8,6 +8,10 @@ from pathlib import Path
 _TMP = Path(tempfile.mkdtemp(prefix="clementiq-test-"))
 os.environ["DATABASE_URL"] = f"sqlite:///{(_TMP / 'test.db').as_posix()}"
 os.environ["GEMINI_API_KEY"] = ""
+# Tests never use real credentials from the root .env (env vars take precedence over .env).
+for _k in ("SNOWFLAKE_ACCOUNT_URL", "SNOWFLAKE_PAT", "NEWS_API_KEY", "ALPHA_VANTAGE_KEY", "SMTP_HOST", "SMTP_PASSWORD"):
+    os.environ[_k] = ""
+os.environ["SNOWFLAKE_CORTEX_ENABLED"] = "false"
 os.environ["WORLDPULSE_LIVE"] = "false"
 os.environ["CLEMENTIQ_ENV"] = "test"
 os.environ["RATE_LIMIT_PER_MINUTE"] = "100000"

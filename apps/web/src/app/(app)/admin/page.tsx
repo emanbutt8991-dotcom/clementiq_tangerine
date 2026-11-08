@@ -5,6 +5,7 @@ import { useMe } from "@/lib/hooks";
 import { Button } from "@/components/ui/button";
 import { SectionTitle, Skeleton } from "@/components/ui/misc";
 import { ImportStatusPanel } from "@/components/admin/ImportStatusPanel";
+import { CortexPanel } from "@/components/world/Cortex";
 
 export default function AdminPage() {
   const me = useMe();
@@ -22,6 +23,7 @@ export default function AdminPage() {
     <div className="space-y-6">
       <SectionTitle title="Data Import" subtitle="Ingestion status of the nine Tangerine challenge datasets. Raw records are preserved; analytics live in derived tables." />
       <ImportStatusPanel />
+      {me.data.role === "admin" && <CortexPanel />}
     </div>
   );
 }
